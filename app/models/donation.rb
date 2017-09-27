@@ -15,12 +15,7 @@ class Donation
   end
 
   def charge
-    @charge ||= if Rails.env.test?
-      OpenStruct.new({
-        amount: satang_amount,
-        paid: (amount.to_i != 999),
-      })
-    else
+    @charge ||= begin
       Omise::Charge.create({
         amount: satang_amount,
         currency: "THB",

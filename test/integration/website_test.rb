@@ -1,14 +1,34 @@
+require 'minitest/mock'
 require 'test_helper'
 
 class WebsiteTest < ActionDispatch::IntegrationTest
+  def mock_retrieve_token
+    mocked_token = OpenStruct.new({
+      id: "tokn_X",
+      card: OpenStruct.new({
+        name: "J DOE",
+        last_digits: "4242",
+        expiration_month: 10,
+        expiration_year: 2020,
+        security_code_check: false,
+      }),
+    })
+    Omise::Token.stub(:retrieve, mocked_token) do
+      yield
+    end
+  end
+
   test "should get index" do
     get "/"
-
-    assert_response :success
+    mock_retrieve_token do
+      assert_response :success
+    end
   end
 
   test "that someone can't donate to no charity" do
-    post donate_path, amount: "100", omise_token: "tokn_X", charity: ""
+    mock_retrieve_token do
+      post donate_path, amount: "100", omise_token: "tokn_X", charity: ""
+    end
 
     assert_template :index
     assert_equal t("website.donate.failure"), flash.now[:alert]
@@ -16,7 +36,9 @@ class WebsiteTest < ActionDispatch::IntegrationTest
 
   test "that someone can't donate 0 to a charity" do
     charity = charities(:children)
-    post donate_path, amount: "0", omise_token: "tokn_X", charity: charity.id
+    mock_retrieve_token do
+      post donate_path, amount: "0", omise_token: "tokn_X", charity: charity.id
+    end
 
     assert_template :index
     assert_equal t("website.donate.failure"), flash.now[:alert]
@@ -24,7 +46,9 @@ class WebsiteTest < ActionDispatch::IntegrationTest
 
   test "that someone can't donate less than 20 to a charity" do
     charity = charities(:children)
-    post donate_path, amount: "19", omise_token: "tokn_X", charity: charity.id
+    mock_retrieve_token do
+      post donate_path, amount: "19", omise_token: "tokn_X", charity: charity.id
+    end
 
     assert_template :index
     assert_equal t("website.donate.failure"), flash.now[:alert]
@@ -32,7 +56,9 @@ class WebsiteTest < ActionDispatch::IntegrationTest
 
   test "that someone can't donate without a token" do
     charity = charities(:children)
-    post donate_path, amount: "100", charity: charity.id
+    mock_retrieve_token do
+      post donate_path, amount: "100", charity: charity.id
+    end
 
     assert_template :index
     assert_equal t("website.donate.failure"), flash.now[:alert]
@@ -43,7 +69,9 @@ class WebsiteTest < ActionDispatch::IntegrationTest
     initial_total = charity.total
     expected_total = initial_total + (100 * 100)
 
-    post_via_redirect donate_path, amount: "100", omise_token: "tokn_X", charity: charity.id
+    Omise::Charge.stub(:create, OpenStruct.new({ amount: 10000, paid: true })) do
+      post_via_redirect donate_path, amount: "100", omise_token: "tokn_X", charity: charity.id
+    end
 
     assert_template :index
     assert_equal t("website.donate.success"), flash[:notice]
@@ -52,9 +80,11 @@ class WebsiteTest < ActionDispatch::IntegrationTest
 
   test "that if the charge fail from omise side it shows an error" do
     charity = charities(:children)
-
-    # 999 is used to set paid as false
-    post donate_path, amount: "999", omise_token: "tokn_X", charity: charity.id
+    Omise::Charge.stub(:create, OpenStruct.new({ amount: 10000, paid: false })) do
+      mock_retrieve_token do
+        post donate_path, amount: "100", omise_token: "tokn_X", charity: charity.id
+      end
+    end
 
     assert_template :index
     assert_equal t("website.donate.failure"), flash.now[:alert]
@@ -65,7 +95,9 @@ class WebsiteTest < ActionDispatch::IntegrationTest
     initial_total = charities.to_a.sum(&:total)
     expected_total = initial_total + (100 * 100)
 
-    post donate_path, amount: "100", omise_token: "tokn_X", charity: "random"
+    Omise::Charge.stub(:create, OpenStruct.new({ amount: 10000, paid: true })) do
+      post donate_path, amount: "100", omise_token: "tokn_X", charity: "random"
+    end
 
     assert_template :index
     assert_equal expected_total, charities.to_a.map(&:reload).sum(&:total)
