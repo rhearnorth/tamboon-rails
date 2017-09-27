@@ -31,7 +31,7 @@ class WebsiteController < ApplicationController
   def donation_params
     {
       omise_token: params[:omise_token],
-      amount: params[:amount].to_i,
+      amount: params[:amount].to_f,
       charity: charity
     }
   end

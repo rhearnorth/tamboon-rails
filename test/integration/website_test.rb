@@ -103,4 +103,18 @@ class WebsiteTest < ActionDispatch::IntegrationTest
     assert_equal expected_total, charities.to_a.map(&:reload).sum(&:total)
     assert_equal t("website.donate.success"), flash[:notice]
   end
+
+  test "that someone can donate to a charity with satang" do
+    charity = charities(:children)
+    initial_total = charity.total
+    expected_total = initial_total + (100.99 * 100)
+
+    Omise::Charge.stub(:create, OpenStruct.new({ amount: 10099, paid: true })) do
+      post_via_redirect donate_path, amount: "100.99", omise_token: "tokn_X", charity: charity.id
+    end
+
+    assert_template :index
+    assert_equal t("website.donate.success"), flash[:notice]
+    assert_equal expected_total, charity.reload.total
+  end
 end

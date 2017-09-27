@@ -11,7 +11,7 @@ class Donation
   end
 
   def satang_amount
-    amount.to_i * 100
+    amount.to_f * 100
   end
 
   def charge
